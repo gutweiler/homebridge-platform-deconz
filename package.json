@@ -1,12 +1,14 @@
 {
   "name": "homebridge-platform-deconz",
   "version": "1.0.0",
-  "description": "",
+  "description": "DeCONZ REST API Platform plugin for the Homebridge project.",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "author": "",
+  "author": {
+    "name": "Clemens Gutweiler"
+  },
   "license": "ISC",
   "keywords": [
     "homebridge-plugin",
@@ -18,5 +20,19 @@
   },
   "dependencies": {
     "request": "^2.69.0"
+  },
+  "homepage": "https://github.com/gutweiler/homebridge-platform-deconz#readme",
+  "bugs": {
+    "url": "https://github.com/gutweiler/homebridge-platform-deconz/issues"
+  },
+  "maintainers": [
+    {
+      "name": "gutweiler",
+      "email": "clemens@gutweiler.net"
+    }
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/gutweiler/homebridge-platform-deconz.git"
   }
 }
