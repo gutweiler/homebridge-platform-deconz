@@ -8,6 +8,7 @@ Tested on Raspberry Pi 3 with [RaspBee](http://www.dresden-elektronik.de/funktec
 - Accessory discovery
 - Switches On/Off
 - Light Brightness
+- Light Hue and Saturation
 
 # Installation
 

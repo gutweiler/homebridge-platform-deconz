@@ -1,6 +1,6 @@
 var request = require('request');
 
-var Accessory, Characteristic, Consumption, Service, TotalConsumption, UUIDGen;
+var Accessory, Characteristic, UUIDGen;
 
 module.exports = function (homebridge) {
     Accessory = homebridge.platformAccessory;
@@ -84,7 +84,21 @@ deconzPlatform.prototype.addDiscoveredLight = function(light) {
 
     // if (accessory === undefined) {
         var accessory = new Accessory(light.name, uuid);
-        var service = accessory.addService(Service.Lightbulb, light.name);
+
+        // https://github.com/KhaosT/HAP-NodeJS/blob/master/lib/gen/HomeKitTypes.js
+        var serviceType = Service.Lightbulb
+        switch(light.type) {
+            case "On/Off plug-in unit":
+                serviceType = Service.Switch
+            break;
+        }
+
+        var service = accessory.addService(serviceType, light.name);
+
+        var infoService = accessory.getService(Service.AccessoryInformation)
+        infoService.setCharacteristic(Characteristic.Manufacturer, light.manufacturer)
+        infoService.setCharacteristic(Characteristic.Model, light.modelid)
+        infoService.setCharacteristic(Characteristic.SerialNumber, light.uniqueid)
 
         // On/Off plug-in unit
         service
@@ -98,7 +112,24 @@ deconzPlatform.prototype.addDiscoveredLight = function(light) {
                 .on('get', function(callback) { this.getBrightness(light, callback) }.bind(this))
                 .on('set', function(val, callback) { this.setBrightness(val, light, callback) }.bind(this))
         }
-        // if Extended color light
+
+        if(light.type == "Extended color light") {
+            // Characteristic.Saturation
+            // Characteristic.Hue
+
+            // Color Temperature
+            // 3.4 Hue and Saturation
+            // In HomeKit, colour is actually defined by two characteristics, Hue and Saturation. Most HomeKit apps provide a colour picker of some sort, hiding these characteristics. In the Hue bridge, colour is defined by the IEC 1931 colour space xy coordinates. homebridge-hue translates Hue and Saturation into xy and back.
+            service
+                .addCharacteristic(new Characteristic.Hue)
+                .on('get', function(callback) { this.getHue(light, callback) }.bind(this))
+                .on('set', function(val, callback) { this.setHue(val, light, callback) }.bind(this))
+
+            service
+                .addCharacteristic(new Characteristic.Saturation)
+                .on('get', function(callback) { this.getSaturation(light, callback) }.bind(this))
+                .on('set', function(val, callback) { this.setSaturation(val, light, callback) }.bind(this))
+        }
 
         accessory.updateReachability(true)
 
@@ -123,6 +154,43 @@ deconzPlatform.prototype.setPowerOn = function(val, light, callback) {
     
     this.putLightState(light, { "on": val == 1 }, function(response) {
         console.log("light on response", response)
+        callback(null)
+    })
+}
+
+deconzPlatform.prototype.getHue = function(light, callback) {
+    console.log("getHue", light.name)
+    
+    this.getLight(light, function(light) {
+        var hue = light.state.hue / 65535 * 360
+        console.log("hue", hue)
+        callback(null, hue)
+    })
+}
+
+deconzPlatform.prototype.setHue = function(val, light, callback) {
+    console.log("setHue", light.name, val)
+    var hue = val / 360 * 65535
+    console.log("hue", hue)
+    this.putLightState(light, { "hue": hue }, function(response) {
+        // console.log("light bri response", response)
+        callback(null)
+    })
+}
+
+deconzPlatform.prototype.getSaturation = function(light, callback) {
+    console.log("getSaturation", light.name)
+    
+    this.getLight(light, function(light) {
+        callback(null, light.state.sat / 255 * 100)
+    })
+}
+
+deconzPlatform.prototype.setSaturation = function(val, light, callback) {
+    console.log("setSaturation", light.name, val)
+    
+    this.putLightState(light, { "sat": val / 100 * 255 }, function(response) {
+        // console.log("light bri response", response)
         callback(null)
     })
 }
