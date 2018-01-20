@@ -106,11 +106,18 @@ deconzPlatform.prototype.addDiscoveredLight = function(light) {
             .on('get', function(callback) { this.getPowerOn(light, callback) }.bind(this))
             .on('set', function(val, callback) { this.setPowerOn(val, light, callback) }.bind(this))
 
-        if(light.type == "Dimmable light" || light.type == "Extended color light") {
+        if(light.type == "Color temperature light" || light.type == "Dimmable light" || light.type == "Extended color light") {
             service
                 .addCharacteristic(new Characteristic.Brightness())
                 .on('get', function(callback) { this.getBrightness(light, callback) }.bind(this))
                 .on('set', function(val, callback) { this.setBrightness(val, light, callback) }.bind(this))
+        }
+
+        if(light.type == "Color temperature light") {
+            service
+                .addCharacteristic(new Characteristic.ColorTemperature())
+                .on('get', function(callback) { this.getColorTemperature(light, callback) }.bind(this))
+                .on('set', function(val, callback) { this.setColorTemperature(val, light, callback) }.bind(this))
         }
 
         if(light.type == "Extended color light") {
@@ -208,6 +215,23 @@ deconzPlatform.prototype.setBrightness = function(val, light, callback) {
     
     this.putLightState(light, { "bri": val / 100 * 255 }, function(response) {
         // console.log("light bri response", response)
+        callback(null)
+    })
+}
+
+deconzPlatform.prototype.getColorTemperature = function(light, callback) {
+    console.log("getColorTemperature", light.name)
+    
+    this.getLight(light, function(light) {
+        callback(null, light.state.ct)
+    })
+}
+
+deconzPlatform.prototype.setColorTemperature = function(val, light, callback) {
+    console.log("setColorTemperature", light.name, val)
+    
+    this.putLightState(light, { "ct": val }, function(response) {
+        // console.log("light ct response", response)
         callback(null)
     })
 }
