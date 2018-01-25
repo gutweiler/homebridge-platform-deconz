@@ -1,6 +1,6 @@
 {
   "name": "homebridge-platform-deconz",
-  "version": "1.0.1",
+  "version": "1.1.0",
   "description": "DeCONZ REST API Platform plugin for the Homebridge project.",
   "main": "index.js",
   "scripts": {
