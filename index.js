@@ -1,4 +1,5 @@
 var request = require('request');
+var W3CWebSocket = require('websocket').w3cwebsocket;
 
 var Accessory, Characteristic, UUIDGen;
 
@@ -22,9 +23,14 @@ function deconzPlatform(log, config, api) {
     this.apiPort = config['port'];
     this.apiKey = config['apikey'];
     this.apiURLPrefix = `http://${this.apiHost}:${this.apiPort}/api/${this.apiKey}/`
+    this.apiConfig = false
 
     this.api.on('didFinishLaunching', function() {
         this.importLights()
+        this.importSensors()
+        this.importConfig().then((config) => {
+            this.initWebsocket()
+        })
     }.bind(this));
 
 }
@@ -56,22 +62,94 @@ deconzPlatform.prototype.putLightState = function(light, body, callback) {
     })
 }
 
-deconzPlatform.prototype.importLights = function(accessory) {
-    request.get(this.apiURL('lights'), function (error, response, body) {
+deconzPlatform.prototype.getSensor = function(sensor, callback) {
+    return new Promise((resolve, reject) => {
+        request.get(this.apiURL("sensors/"+sensor.id), function (error, response, body) {
+            if (!error && response.statusCode == 200) {
+                var sensor = JSON.parse(body)
+                resolve(sensor)
+            } else reject(error)
+        })
+    });
+}
+
+deconzPlatform.prototype.importConfig = function() {
+    return new Promise((resolve, reject) => {
+        request.get(this.apiURL('config'), (error, response, body) => {
+            if (!error && response.statusCode == 200) {
+                this.apiConfig = JSON.parse(body)
+                resolve(this.apiConfig)
+            } else {
+                reject()
+            }
+        })
+    });
+}
+
+deconzPlatform.prototype.initWebsocket = function() {
+    var url = 'ws://' + this.apiHost + ':' + this.apiConfig.websocketport + '/';
+    console.log('websocket connecting', url)
+
+    var client = new W3CWebSocket(url);
+ 
+    client.onerror = function() {
+        console.log('websocket connection error', url);
+    };
+    
+    client.onclose = function() {
+        console.log('websocket connection closed', url );
+    };
+    
+    client.onmessage = (e) => {
+        if (typeof e.data === 'string') {
+            var d = JSON.parse(e.data);
+            console.log(d);
+            // if(d.id == 2) {
+            //     console.log('check')
+            //     var acc = this.apiSensors[d.id].accessory
+            //     console.log('accessory', acc)
+            //     var service = acc.getService(Service.MotionSensor)
+            //     console.log('service', service)
+            //     service.setCharacteristic(Characteristic.MotionDetected, d.state.presence)
+            // }
+        }
+    };
+}
+
+deconzPlatform.prototype.importLights = function() {
+    request.get(this.apiURL('lights'), (error, response, body) => {
         if (!error && response.statusCode == 200) {
             this.apiLights = JSON.parse(body)
             for( var k in this.apiLights) {
                 this.apiLights[k].id = k
-                this.addDiscoveredLight(this.apiLights[k])
+                this.addDiscoveredAccessory(this.apiLights[k])
             }
-            console.log('Fertig')
+            console.log('importLights finished')
         }
-    }.bind(this));
+    })
 }
 
-deconzPlatform.prototype.addDiscoveredLight = function(light) {
-    console.log("addDiscoveredLight")
+deconzPlatform.prototype.importSensors = function() {
+    request.get(this.apiURL('sensors'), (error, response, body) => {
+        if (!error && response.statusCode == 200) {
+            this.apiSensors = JSON.parse(body)
+            for( var k in this.apiSensors) {
+                this.apiSensors[k].id = k
+                this.apiSensors[k].accessory = this.addDiscoveredAccessory(this.apiSensors[k])
+            }
+            console.log('importSensors finished')
+        }
+    })
+}
 
+
+deconzPlatform.prototype.addDiscoveredAccessory = function(light) {
+    console.log("addDiscoveredLight", light.type, light)
+
+    if( !light.uniqueid ) {
+        console.warn('accessory.uniqueid missing', light)
+        return
+    }
     var uuid = UUIDGen.generate(light.uniqueid);
 
     accessory = this.accessories[uuid]
@@ -91,20 +169,36 @@ deconzPlatform.prototype.addDiscoveredLight = function(light) {
             case "On/Off plug-in unit":
                 serviceType = Service.Switch
             break;
-        }
 
+            // Hue motion sensor types
+            case "ZHALightLevel":
+                serviceType = Service.LightSensor
+            break;
+            case "ZHAPresence":
+                serviceType = Service.MotionSensor
+            break;
+            case "ZHATemperature":
+                serviceType = Service.TemperatureSensor
+            break;
+            case "Daylight":
+                serviceType = Service.LightSensor
+            break;
+        }
+        // console.log('service', serviceType, light.name)
         var service = accessory.addService(serviceType, light.name);
 
         var infoService = accessory.getService(Service.AccessoryInformation)
-        infoService.setCharacteristic(Characteristic.Manufacturer, light.manufacturer)
+        infoService.setCharacteristic(Characteristic.Manufacturer, light.manufacturername)
         infoService.setCharacteristic(Characteristic.Model, light.modelid)
         infoService.setCharacteristic(Characteristic.SerialNumber, light.uniqueid)
 
         // On/Off plug-in unit
-        service
-            .getCharacteristic(Characteristic.On)
-            .on('get', function(callback) { this.getPowerOn(light, callback) }.bind(this))
-            .on('set', function(val, callback) { this.setPowerOn(val, light, callback) }.bind(this))
+        if( serviceType == Service.Lightbulb || serviceType == Service.Switch) {
+            service
+                .getCharacteristic(Characteristic.On)
+                .on('get', function(callback) { this.getPowerOn(light, callback) }.bind(this))
+                .on('set', function(val, callback) { this.setPowerOn(val, light, callback) }.bind(this))
+        }
 
         if(light.type == "Color temperature light" || light.type == "Dimmable light" || light.type == "Extended color light") {
             service
@@ -138,6 +232,12 @@ deconzPlatform.prototype.addDiscoveredLight = function(light) {
                 .on('set', function(val, callback) { this.setSaturation(val, light, callback) }.bind(this))
         }
 
+        if(light.type == "ZHAPresence") {
+            service
+                .getCharacteristic(Characteristic.MotionDetected)
+                .on('get', (callback) => { this.getSensorPresence(light, callback) })
+        }
+
         accessory.updateReachability(true)
 
         this.accessories[accessory.UUID] = accessory;
@@ -145,6 +245,8 @@ deconzPlatform.prototype.addDiscoveredLight = function(light) {
     /*} else {
         console.log("schon bekannt..")
     }*/
+
+    return accessory
 }
 
 deconzPlatform.prototype.getPowerOn = function(light, callback) {
@@ -233,6 +335,21 @@ deconzPlatform.prototype.setColorTemperature = function(val, light, callback) {
     this.putLightState(light, { "ct": val }, function(response) {
         // console.log("light ct response", response)
         callback(null)
+    })
+}
+
+deconzPlatform.prototype.getSensorPresence = function(sensor, callback) {
+    console.log("getSensorPresence", sensor.name)
+    
+    this.getSensor(sensor).then((s) => {
+        console.log('getSensor', s)
+        callback(null, s.state.presence == true)
+
+        //       throw new Error("This callback function has already been called by someone else; it can only be called one time.");
+        // setTimeout(() => {
+        //     console.log('fake to true')
+        //     callback(null, true)
+        // }, 15000)
     })
 }
 
