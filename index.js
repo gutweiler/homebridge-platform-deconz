@@ -103,15 +103,21 @@ deconzPlatform.prototype.initWebsocket = function() {
     client.onmessage = (e) => {
         if (typeof e.data === 'string') {
             var d = JSON.parse(e.data);
-            console.log(d);
-            // if(d.id == 2) {
-            //     console.log('check')
-            //     var acc = this.apiSensors[d.id].accessory
-            //     console.log('accessory', acc)
-            //     var service = acc.getService(Service.MotionSensor)
-            //     console.log('service', service)
-            //     service.setCharacteristic(Characteristic.MotionDetected, d.state.presence)
-            // }
+			if(!this.apiSensors[d.id] || !this.apiSensors[d.id].accessory) return
+
+			var light = this.apiSensors[d.id]
+			
+			if(light.type == "ZHAPresence") {
+				light.accessory.getService(Service.MotionSensor).setCharacteristic(Characteristic.MotionDetected, d.state.presence == true)
+			}
+
+			if(light.type == "ZHALightLevel") {
+				light.accessory.getService(Service.LightSensor).setCharacteristic(Characteristic.CurrentAmbientLightLevel, d.state.lux)
+			}
+
+			if(light.type == "ZHATemperature") {
+				light.accessory.getService(Service.TemperatureSensor).setCharacteristic(Characteristic.CurrentTemperature, d.state.temperature/100)
+			}
         }
     };
 }
@@ -124,7 +130,7 @@ deconzPlatform.prototype.importLights = function() {
                 this.apiLights[k].id = k
                 this.addDiscoveredAccessory(this.apiLights[k])
             }
-            console.log('importLights finished')
+            // console.log('importLights finished')
         }
     })
 }
@@ -137,14 +143,14 @@ deconzPlatform.prototype.importSensors = function() {
                 this.apiSensors[k].id = k
                 this.apiSensors[k].accessory = this.addDiscoveredAccessory(this.apiSensors[k])
             }
-            console.log('importSensors finished')
+            console.log('importSensors finished', this.apiSensors)
         }
     })
 }
 
 
 deconzPlatform.prototype.addDiscoveredAccessory = function(light) {
-    console.log("addDiscoveredLight", light.type, light)
+    // console.log("addDiscoveredLight", light.type, light)
 
     if( !light.uniqueid ) {
         console.warn('accessory.uniqueid missing', light)
@@ -171,11 +177,11 @@ deconzPlatform.prototype.addDiscoveredAccessory = function(light) {
             break;
 
             // Hue motion sensor types
-            case "ZHALightLevel":
-                serviceType = Service.LightSensor
-            break;
             case "ZHAPresence":
                 serviceType = Service.MotionSensor
+            break;
+            case "ZHALightLevel":
+                serviceType = Service.LightSensor
             break;
             case "ZHATemperature":
                 serviceType = Service.TemperatureSensor
@@ -238,6 +244,18 @@ deconzPlatform.prototype.addDiscoveredAccessory = function(light) {
                 .on('get', (callback) => { this.getSensorPresence(light, callback) })
         }
 
+        if(light.type == "ZHALightLevel") {
+            service
+                .getCharacteristic(Characteristic.CurrentAmbientLightLevel)
+                .on('get', (callback) => { this.getSensorLightLevel(light, callback) })
+        }
+
+        if(light.type == "ZHATemperature") {
+            service
+                .getCharacteristic(Characteristic.CurrentTemperature)
+                .on('get', (callback) => { this.getSensorTemperature(light, callback) })
+        }
+
         accessory.updateReachability(true)
 
         this.accessories[accessory.UUID] = accessory;
@@ -250,7 +268,7 @@ deconzPlatform.prototype.addDiscoveredAccessory = function(light) {
 }
 
 deconzPlatform.prototype.getPowerOn = function(light, callback) {
-    console.log("getPowerOn", light.name)
+    // console.log("getPowerOn", light.name)
 
     this.getLight(light, function(light) {
         console.log(light.name, light.state.on)
@@ -259,7 +277,7 @@ deconzPlatform.prototype.getPowerOn = function(light, callback) {
 }
 
 deconzPlatform.prototype.setPowerOn = function(val, light, callback) {
-    console.log("setPowerOn", light.name, val)
+    // console.log("setPowerOn", light.name, val)
     
     this.putLightState(light, { "on": val == 1 }, function(response) {
         console.log("light on response", response)
@@ -268,19 +286,19 @@ deconzPlatform.prototype.setPowerOn = function(val, light, callback) {
 }
 
 deconzPlatform.prototype.getHue = function(light, callback) {
-    console.log("getHue", light.name)
+    // console.log("getHue", light.name)
     
     this.getLight(light, function(light) {
         var hue = light.state.hue / 65535 * 360
-        console.log("hue", hue)
+        // console.log("hue", hue)
         callback(null, hue)
     })
 }
 
 deconzPlatform.prototype.setHue = function(val, light, callback) {
-    console.log("setHue", light.name, val)
+    // console.log("setHue", light.name, val)
     var hue = val / 360 * 65535
-    console.log("hue", hue)
+    // console.log("hue", hue)
     this.putLightState(light, { "hue": hue }, function(response) {
         // console.log("light bri response", response)
         callback(null)
@@ -288,7 +306,7 @@ deconzPlatform.prototype.setHue = function(val, light, callback) {
 }
 
 deconzPlatform.prototype.getSaturation = function(light, callback) {
-    console.log("getSaturation", light.name)
+    // console.log("getSaturation", light.name)
     
     this.getLight(light, function(light) {
         callback(null, light.state.sat / 255 * 100)
@@ -296,7 +314,7 @@ deconzPlatform.prototype.getSaturation = function(light, callback) {
 }
 
 deconzPlatform.prototype.setSaturation = function(val, light, callback) {
-    console.log("setSaturation", light.name, val)
+    // console.log("setSaturation", light.name, val)
     
     this.putLightState(light, { "sat": val / 100 * 255 }, function(response) {
         // console.log("light bri response", response)
@@ -305,7 +323,7 @@ deconzPlatform.prototype.setSaturation = function(val, light, callback) {
 }
 
 deconzPlatform.prototype.getBrightness = function(light, callback) {
-    console.log("getBrightness", light.name)
+    // console.log("getBrightness", light.name)
     
     this.getLight(light, function(light) {
         callback(null, light.state.bri / 255 * 100)
@@ -313,7 +331,7 @@ deconzPlatform.prototype.getBrightness = function(light, callback) {
 }
 
 deconzPlatform.prototype.setBrightness = function(val, light, callback) {
-    console.log("setBrightness", light.name, val)
+    // console.log("setBrightness", light.name, val)
     
     this.putLightState(light, { "bri": val / 100 * 255 }, function(response) {
         // console.log("light bri response", response)
@@ -322,7 +340,7 @@ deconzPlatform.prototype.setBrightness = function(val, light, callback) {
 }
 
 deconzPlatform.prototype.getColorTemperature = function(light, callback) {
-    console.log("getColorTemperature", light.name)
+    // console.log("getColorTemperature", light.name)
     
     this.getLight(light, function(light) {
         callback(null, light.state.ct)
@@ -330,7 +348,7 @@ deconzPlatform.prototype.getColorTemperature = function(light, callback) {
 }
 
 deconzPlatform.prototype.setColorTemperature = function(val, light, callback) {
-    console.log("setColorTemperature", light.name, val)
+    // console.log("setColorTemperature", light.name, val)
     
     this.putLightState(light, { "ct": val }, function(response) {
         // console.log("light ct response", response)
@@ -339,17 +357,20 @@ deconzPlatform.prototype.setColorTemperature = function(val, light, callback) {
 }
 
 deconzPlatform.prototype.getSensorPresence = function(sensor, callback) {
-    console.log("getSensorPresence", sensor.name)
-    
     this.getSensor(sensor).then((s) => {
-        console.log('getSensor', s)
         callback(null, s.state.presence == true)
+    })
+}
 
-        //       throw new Error("This callback function has already been called by someone else; it can only be called one time.");
-        // setTimeout(() => {
-        //     console.log('fake to true')
-        //     callback(null, true)
-        // }, 15000)
+deconzPlatform.prototype.getSensorTemperature = function(sensor, callback) {
+    this.getSensor(sensor).then((s) => {
+        callback(null, s.state.temperature/100)
+    })
+}
+
+deconzPlatform.prototype.getSensorLightLevel = function(sensor, callback) {
+    this.getSensor(sensor).then((s) => {
+        callback(null, s.state.lux)
     })
 }
 
